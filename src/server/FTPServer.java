@@ -4,6 +4,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FilenameFilter;
 import java.net.ServerSocket;
 import java.net.Socket;
 
@@ -104,6 +105,19 @@ class FTPHandler extends Thread {
 
     }
 
+    void ListFiles() throws Exception {
+        File dir = new File("remotedir");
+        File[] files = dir.listFiles();
+
+        StringBuffer result = new StringBuffer();
+        for (int i = 0; i < files.length; i++) {
+            result.append(files[i].getName() + " ");
+        }
+        String dir_list = result.toString();
+        System.out.println("REMOTE_HOME ls: " + dir_list);
+        cout.writeUTF(dir_list);
+    }
+
     Integer getAvailableDataConnection() {
 
         int nextport = -1;
@@ -129,6 +143,9 @@ class FTPHandler extends Thread {
                 } else if (command.compareToIgnoreCase("STOR") == 0) {
                     System.out.println("Client command: STOR");
                     ReceiveFile();
+                } else if (command.compareToIgnoreCase("LIST") == 0) {
+                    System.out.println("Client command: LIST");
+                    ListFiles();
                 } else if (command.compareToIgnoreCase("QUIT") == 0) {
                     System.out.println("Client command: QUIT");
                     clientsocket.close();

@@ -15,7 +15,6 @@ import java.net.Socket;
  * Time: 11:12 AM
  */
 
-
 public class Client {
     public static void main(String args[]) throws Exception {
         Socket soc = new Socket("127.0.0.1", 6000);
@@ -28,7 +27,7 @@ public class Client {
 
 class FTPClient {
     String DIR_HOME = "dir/";
-    Socket ClientSoc;
+    Socket me_socket;
 
     DataInputStream cin;
     DataOutputStream cout;
@@ -36,9 +35,9 @@ class FTPClient {
 
     FTPClient(Socket soc) {
         try {
-            ClientSoc = soc;
-            cin = new DataInputStream(ClientSoc.getInputStream());
-            cout = new DataOutputStream(ClientSoc.getOutputStream());
+            me_socket = soc;
+            cin = new DataInputStream(me_socket.getInputStream());
+            cout = new DataOutputStream(me_socket.getOutputStream());
             br = new BufferedReader(new InputStreamReader(System.in));
         } catch (Exception ex) {
         }
@@ -55,7 +54,7 @@ class FTPClient {
 
         /* Wait for confirmation from remote host */
         if (sockbuffer.compareToIgnoreCase("FOUND") == 0) {
-            System.out.println("File found. Beginning file transfer.");
+            System.out.println("File found... Beginning file transfer");
         } else if (sockbuffer.compareToIgnoreCase("NOTFOUND") == 0) {
             System.out.println("File could not be found on remote host");
             return;
@@ -92,7 +91,18 @@ class FTPClient {
         fos.close();
         din.close();
         dsock.close();
-        System.out.println("File transfer from remote host finished");
+        System.out.println("File transfer from remote host complete");
+    }
+
+    void GetList() throws Exception {
+        String list = cin.readUTF();
+        System.out.println(list);
+    }
+
+    void Quit() throws Exception {
+        cin.close();
+        cout.close();
+        me_socket.close();
     }
 
     public void run() throws Exception {
@@ -108,12 +118,13 @@ class FTPClient {
             } else if (command.compareToIgnoreCase("STOR") == 0) {
                 cout.writeUTF(tokens[0]);
                 SendFile(tokens[1]);
+            } else if (command.compareToIgnoreCase("LIST") == 0) {
+                cout.writeUTF(tokens[0]);
+                GetList();
             } else if (command.compareToIgnoreCase("QUIT") == 0) {
                 // fcn this
                 cout.writeUTF(tokens[0]);
-                cin.close();
-                cout.close();
-                ClientSoc.close();
+                Quit();
                 return;
             } else {
                 /* couldn't recognize command */
