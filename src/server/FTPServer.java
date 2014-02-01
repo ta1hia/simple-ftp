@@ -26,41 +26,57 @@ public class FTPServer {
 }
 
 class FTPHandler extends Thread {
+    int[] data_connections = new int[10];
     String REMOTE_HOME = "remotedir/";
     Socket clientsocket;
 
-    DataInputStream din;
-    DataOutputStream dout;
+    DataInputStream cin;
+    DataOutputStream cout;
 
     FTPHandler(Socket soc) {
         try {
             clientsocket = soc;
-            din = new DataInputStream(clientsocket.getInputStream());
-            dout = new DataOutputStream(clientsocket.getOutputStream());
+            cin = new DataInputStream(clientsocket.getInputStream());
+            cout = new DataOutputStream(clientsocket.getOutputStream());
             System.out.println("FTP Client Connected ...");
             start();
-
         } catch (Exception ex) {
         }
     }
 
     void SendFile() throws Exception {
-        String filename = din.readUTF();
-        System.out.println("Client filename and path: " + REMOTE_HOME +filename);
+        Integer nextport = -1;
+        String filename = cin.readUTF();
+        System.out.println("Client filename and path: " + REMOTE_HOME + filename);
 
         File f = new File(REMOTE_HOME + filename);
 
         /* Send client confirmation if client was found */
         if (f.exists()) {
             System.out.println("File found");
-            dout.writeUTF("FOUND");
+            cout.writeUTF("FOUND");
         } else {
             System.out.println("Could not find file");
-            dout.writeUTF("NOTFOUND");
+            cout.writeUTF("NOTFOUND");
             return;
         }
 
-        /* Start file transfer */
+        /* Send client port # for data connection */
+        nextport = getAvailableDataConnection();
+        if (nextport == -1) {
+            System.out.println("No data port available");
+            cout.writeUTF(Integer.toString(nextport));
+            return;
+        }
+
+        /* Open and prepare data connection */
+        System.out.println("Openning data connection for file transfer on port " + (6010 + nextport));
+        cout.writeUTF(Integer.toString(nextport));
+        ServerSocket dsock = new ServerSocket(6010 + nextport);
+        Socket client_dsock = dsock.accept();
+        DataOutputStream dout = new DataOutputStream(client_dsock.getOutputStream());
+
+        /* File transfer */
         FileInputStream fin = new FileInputStream(f);
         int len = 1024;
         byte[] buffer;
@@ -71,11 +87,11 @@ class FTPHandler extends Thread {
         }
         fin.close();
         System.out.println("File transfer to client finished");
-
+        data_connections[nextport] = 0;
     }
 
     void ReceiveFile() throws Exception {
-        String filename = din.readUTF();
+        String filename = cin.readUTF();
         if (filename.compareTo("") == 0) {
             return;
         }
@@ -88,12 +104,23 @@ class FTPHandler extends Thread {
 
     }
 
+    Integer getAvailableDataConnection() {
+
+        int nextport = -1;
+        for (int i = 0; i < 10; i++) {
+            if (data_connections[i] == 0) {
+                nextport = i;
+                break;
+            }
+        }
+        return nextport;
+    }
 
     public void run() {
         while (true) {
             try {
                 System.out.println("Waiting for command");
-                String command = din.readUTF();
+                String command = cin.readUTF();
                 System.out.println("Command is: " + command);
 
                 if (command.compareToIgnoreCase("RETR") == 0) {
@@ -104,6 +131,8 @@ class FTPHandler extends Thread {
                     ReceiveFile();
                 } else if (command.compareToIgnoreCase("QUIT") == 0) {
                     System.out.println("Client command: QUIT");
+                    clientsocket.close();
+                    return;
                 } else {
                 /* couldn't recognize command */
                     System.out.println("Client command: invalid");

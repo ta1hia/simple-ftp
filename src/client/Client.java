@@ -4,7 +4,6 @@ import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStreamReader;
 import java.net.Socket;
@@ -31,15 +30,15 @@ class FTPClient {
     String DIR_HOME = "dir/";
     Socket ClientSoc;
 
-    DataInputStream din;
-    DataOutputStream dout;
+    DataInputStream cin;
+    DataOutputStream cout;
     BufferedReader br;
 
     FTPClient(Socket soc) {
         try {
             ClientSoc = soc;
-            din = new DataInputStream(ClientSoc.getInputStream());
-            dout = new DataOutputStream(ClientSoc.getOutputStream());
+            cin = new DataInputStream(ClientSoc.getInputStream());
+            cout = new DataOutputStream(ClientSoc.getOutputStream());
             br = new BufferedReader(new InputStreamReader(System.in));
         } catch (Exception ex) {
         }
@@ -51,12 +50,13 @@ class FTPClient {
 
     void ReceiveFile(String filename) throws Exception {
 
-        dout.writeUTF(filename);
-        String confirm = din.readUTF();
+        cout.writeUTF(filename);
+        String sockbuffer = cin.readUTF();
 
-        if (confirm.compareToIgnoreCase("FOUND") == 0) {
+        /* Wait for confirmation from remote host */
+        if (sockbuffer.compareToIgnoreCase("FOUND") == 0) {
             System.out.println("File found. Beginning file transfer.");
-        } else if (confirm.compareToIgnoreCase("NOTFOUND") == 0) {
+        } else if (sockbuffer.compareToIgnoreCase("NOTFOUND") == 0) {
             System.out.println("File could not be found on remote host");
             return;
         } else {
@@ -64,6 +64,21 @@ class FTPClient {
             return;
         }
 
+        /* Wait for remote host to send data connection port # */
+        Socket dsock;
+        sockbuffer = cin.readUTF();
+        Integer port = Integer.parseInt(sockbuffer);
+        if (port == -1) {
+            System.out.println("No data port available");
+            return;
+        }
+
+        /* Make data connection on remote port */
+        dsock = new Socket("127.0.0.1", 6010 + port);
+        System.out.println("Receiving file from remote host on port " + (6010 + port));
+        DataInputStream din = new DataInputStream(dsock.getInputStream());
+
+        /* File transfer */
         File f = new File(DIR_HOME + filename);
         FileOutputStream fos = new FileOutputStream(f);
 
@@ -75,9 +90,9 @@ class FTPClient {
             fos.write(buffer, 0, len);
         }
         fos.close();
+        din.close();
+        dsock.close();
         System.out.println("File transfer from remote host finished");
-
-
     }
 
     public void run() throws Exception {
@@ -88,19 +103,22 @@ class FTPClient {
             command = tokens[0];
 
             if (command.compareToIgnoreCase("RETR") == 0) {
-                dout.writeUTF(tokens[0]);
+                cout.writeUTF(tokens[0]);
                 ReceiveFile(tokens[1]);
             } else if (command.compareToIgnoreCase("STOR") == 0) {
-                dout.writeUTF(tokens[0]);
+                cout.writeUTF(tokens[0]);
                 SendFile(tokens[1]);
             } else if (command.compareToIgnoreCase("QUIT") == 0) {
-                dout.writeUTF(tokens[0]);
+                // fcn this
+                cout.writeUTF(tokens[0]);
+                cin.close();
+                cout.close();
+                ClientSoc.close();
                 return;
             } else {
                 /* couldn't recognize command */
                 System.out.println("Client command: invalid");
             }
-
         }
     }
 }
